@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aktin-dwh-operational-analytics"
+version = "1.0.0"
+description = "Python scripts for reproducing the operational analyses, tables, and figures reported in the AKTIN Data Warehouse manuscript."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Alexander Kombeiz", email = "akombeiz@ukaachen.de" }
+]
+keywords = [
+    "AKTIN",
+    "data warehouse",
+    "health informatics",
+    "operational analytics",
+    "reproducible research",
+    "figure generation"
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Information Analysis"
+]
+dependencies = [
+    "atlassian-python-api",
+    "geopandas",
+    "matplotlib",
+    "pandas",
+    "python-dotenv",
+    "requests",
+    "seaborn"
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.2",
+    "mypy>=1.8"
+]
+
+[project.urls]
+Repository = "https://github.com/rwth-imi/aktin-framework-operational-analytics"
+
+[tool.ruff]
+line-length = 125
+indent-width = 2
+target-version = "py310"
+
+[tool.ruff.format]
+indent-style = "space"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
