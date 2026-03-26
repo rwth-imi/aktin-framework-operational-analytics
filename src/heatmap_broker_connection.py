@@ -84,8 +84,7 @@ def compute_monthly_threshold_percentage(df: pd.DataFrame, node_id: str) -> pd.D
   df["day"] = df["date"].dt.day
 
   grouped = df.groupby("month").agg(
-      days_within_threshold=("within_threshold", "sum"),
-      days_observed=("day", pd.Series.nunique)
+    days_within_threshold=("within_threshold", "sum"), days_observed=("day", pd.Series.nunique)
   )
   grouped["threshold_percentage"] = (grouped["days_within_threshold"] / grouped["days_observed"]) * 100
   grouped["days_in_month"] = grouped.index.to_timestamp().days_in_month
@@ -163,11 +162,7 @@ def postprocess_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_connection_heatmap(df: pd.DataFrame, output_dir: Path):
-  heatmap_df = df.pivot_table(
-      index="node_id",
-      columns="month",
-      values="threshold_percentage"
-  ).sort_index()
+  heatmap_df = df.pivot_table(index="node_id", columns="month", values="threshold_percentage").sort_index()
 
   # Build custom annotation DataFrame
   annot_df = heatmap_df.apply(lambda col: col.map(lambda x: f"{x:.0f}%" if pd.notna(x) and 0 < x < 100 else ""))
@@ -176,16 +171,16 @@ def plot_connection_heatmap(df: pd.DataFrame, output_dir: Path):
   plt.figure(figsize=(20, 24))
   sns.set_style("whitegrid")
   ax = sns.heatmap(
-      heatmap_df,
-      annot=annot_df,
-      fmt="",
-      cmap="RdYlGn",
-      vmin=0,
-      vmax=100,
-      linewidths=0.3,
-      linecolor="grey",
-      cbar=False,
-      cbar_kws={"label": "Connection %"},
+    heatmap_df,
+    annot=annot_df,
+    fmt="",
+    cmap="RdYlGn",
+    vmin=0,
+    vmax=100,
+    linewidths=0.3,
+    linecolor="grey",
+    cbar=False,
+    cbar_kws={"label": "Connection %"},
   )
 
   # Title Axis labels
@@ -216,11 +211,15 @@ def compute_yearly_connection_stats(df: pd.DataFrame, output_dir: Path) -> pd.Da
   months_per_year = df.groupby("year")["month"].nunique().reset_index(name="months_with_data")
 
   # Aggregate observed/unobserved days and handshake % per node per year
-  yearly = df.groupby(["year", "node_id"]).agg(
+  yearly = (
+    df.groupby(["year", "node_id"])
+    .agg(
       observed_days=("days_observed", "sum"),
       unobserved_days=("unobserved_days", "sum"),
-      handshake_avg=("threshold_percentage", "mean")
-  ).reset_index()
+      handshake_avg=("threshold_percentage", "mean"),
+    )
+    .reset_index()
+  )
 
   yearly["total_days"] = yearly["observed_days"] + yearly["unobserved_days"]
 
@@ -236,14 +235,16 @@ def compute_yearly_connection_stats(df: pd.DataFrame, output_dir: Path) -> pd.Da
     observed_days_pct = (total_observed_days / total_days) * 100 if total_days else 0
     avg_handshake_reliability = (total_handshake_days / total_observed_days) * 100 if total_observed_days else 0
 
-    return pd.Series({
-      "observed_nodes": int(group["node_id"].nunique()),
-      "total_observed_days": int(round(total_observed_days)),
-      "total_days": int(round(total_days)),
-      "observed_days_pct": observed_days_pct,
-      "handshake_within_threshold_days": int(round(total_handshake_days)),
-      "avg_handshake_reliability": avg_handshake_reliability,
-    })
+    return pd.Series(
+      {
+        "observed_nodes": int(group["node_id"].nunique()),
+        "total_observed_days": int(round(total_observed_days)),
+        "total_days": int(round(total_days)),
+        "observed_days_pct": observed_days_pct,
+        "handshake_within_threshold_days": int(round(total_handshake_days)),
+        "avg_handshake_reliability": avg_handshake_reliability,
+      }
+    )
 
   result = yearly.groupby("year", group_keys=False).apply(aggregate_year, include_groups=False).reset_index()
   result = result.merge(months_per_year, on="year")

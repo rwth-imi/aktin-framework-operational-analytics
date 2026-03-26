@@ -80,13 +80,7 @@ def plot_piechart(edis_counts: pd.Series, output_dir: Path):
     value = int(round(pct / 100.0 * total))
     return f"{pct:.1f}%\n({value})"
 
-  ax.pie(
-      edis_counts,
-      labels=edis_counts.index,
-      autopct=format_pct,
-      startangle=140,
-      textprops={"fontsize": 16}
-  )
+  ax.pie(edis_counts, labels=edis_counts.index, autopct=format_pct, startangle=140, textprops={"fontsize": 16})
   plt.tight_layout()
   plot_name = "piechart_edis.svg"
   plt.savefig(output_dir / plot_name, format="svg", transparent=True)
@@ -116,24 +110,18 @@ def plot_barchart(edis_counts: pd.Series, output_dir: Path):
   for bar in bars:
     width = bar.get_width()
     pct = (width / total) * 100
-    label = f'{int(width)} ({pct:.1f}%)'
-    ax.text(
-        width + 0.5,
-        bar.get_y() + bar.get_height() / 2,
-        label,
-        va='center',
-        fontsize=12
-    )
-  ax.spines['top'].set_visible(False)
-  ax.spines['right'].set_visible(False)
-  ax.grid(axis='x', linestyle='--', alpha=0.5)
-  ax.set_xlabel('Number of EDs', fontsize=14)
-  ax.tick_params(axis='x', which='major', labelsize=12)
-  ax.tick_params(axis='y', which='major', labelsize=12)
+    label = f"{int(width)} ({pct:.1f}%)"
+    ax.text(width + 0.5, bar.get_y() + bar.get_height() / 2, label, va="center", fontsize=12)
+  ax.spines["top"].set_visible(False)
+  ax.spines["right"].set_visible(False)
+  ax.grid(axis="x", linestyle="--", alpha=0.5)
+  ax.set_xlabel("Number of EDs", fontsize=14)
+  ax.tick_params(axis="x", which="major", labelsize=12)
+  ax.tick_params(axis="y", which="major", labelsize=12)
   plt.tight_layout()
 
   plot_name = "barchart_edis.svg"
-  plt.savefig(output_dir / plot_name, format="svg", bbox_inches='tight')
+  plt.savefig(output_dir / plot_name, format="svg", bbox_inches="tight")
   plt.close()
 
 

@@ -45,8 +45,13 @@ def find_files(downloads_dir: Path, keyword: str, suffix: str) -> List[Path]:
   """
   Searches all node directories in the downloads folder and returns a list of file paths with given keyword.
   """
-  return sorted(file for node_dir in downloads_dir.iterdir() if node_dir.is_dir() for file in node_dir.iterdir() if
-                file.is_file() and keyword in file.name and file.suffix == suffix)
+  return sorted(
+    file
+    for node_dir in downloads_dir.iterdir()
+    if node_dir.is_dir()
+    for file in node_dir.iterdir()
+    if file.is_file() and keyword in file.name and file.suffix == suffix
+  )
 
 
 def find_all_version_logs(downloads_dir: Path) -> List[Path]:
@@ -170,7 +175,7 @@ def summarize_j2ee_updates(df: pd.DataFrame, output_dir: Path) -> None:
   percentages = (counts / total * 100).round(2)
   lines = ["Nodes per version:"]
   for version in counts.index:
-    if version == '1.6':
+    if version == "1.6":
       counts[version] += no_current
     lines.append(f"{version}: {counts[version]} nodes ({percentages[version]}%)")
 

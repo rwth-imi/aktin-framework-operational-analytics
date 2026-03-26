@@ -27,7 +27,7 @@ import pandas as pd
 from helper.download_and_aggregate_broker_results import get_or_export_request_result
 from helper.paths import get_output_dir, get_downloads_dir
 
-REQUEST_IDS = ['3047', '3077', '3086', '3100', '3105', '3114', '3191', '3233', '3299']
+REQUEST_IDS = ["3047", "3077", "3086", "3100", "3105", "3114", "3191", "3233", "3299"]
 
 
 def create_daily_encounter_df(zip_file: Path) -> pd.DataFrame:
@@ -87,9 +87,7 @@ def aggregate_daily_to_monthly(df: pd.DataFrame) -> pd.DataFrame:
 
   grouped = df.groupby(["node_id", "month"])
   agg_df = grouped.agg(
-      encounter=("encounter", "sum"),
-      p21=("p21", "sum"),
-      days_with_encounter=("encounter", lambda x: (x > 0).sum())
+    encounter=("encounter", "sum"), p21=("p21", "sum"), days_with_encounter=("encounter", lambda x: (x > 0).sum())
   ).reset_index()
 
   agg_df["days_in_month"] = agg_df["month"].dt.to_timestamp().dt.days_in_month
@@ -113,24 +111,33 @@ def summarize_yearly_encounter(df: pd.DataFrame, output_dir: Path) -> pd.DataFra
   df["year"] = df["month"].dt.year
   grouped = df.groupby(["node_id", "year"])
   summary = grouped.agg(
-      observed_months=("month", pd.Series.nunique),
-      encounter_mean=("encounter", "mean"),
-      encounter_std=("encounter", "std"),
-      encounter_median=("encounter", "median"),
-      encounter_q1=("encounter", lambda x: x.quantile(0.25)),
-      encounter_q3=("encounter", lambda x: x.quantile(0.75)),
-      encounter_iqr=("encounter", lambda x: x.quantile(0.75) - x.quantile(0.25)),
-      p21_mean=("p21", "mean"),
-      p21_median=("p21", "median"),
-      p21_q1=("p21", lambda x: x.quantile(0.25)),
-      p21_q3=("p21", lambda x: x.quantile(0.75)),
-      p21_iqr=("p21", lambda x: x.quantile(0.75) - x.quantile(0.25))
+    observed_months=("month", pd.Series.nunique),
+    encounter_mean=("encounter", "mean"),
+    encounter_std=("encounter", "std"),
+    encounter_median=("encounter", "median"),
+    encounter_q1=("encounter", lambda x: x.quantile(0.25)),
+    encounter_q3=("encounter", lambda x: x.quantile(0.75)),
+    encounter_iqr=("encounter", lambda x: x.quantile(0.75) - x.quantile(0.25)),
+    p21_mean=("p21", "mean"),
+    p21_median=("p21", "median"),
+    p21_q1=("p21", lambda x: x.quantile(0.25)),
+    p21_q3=("p21", lambda x: x.quantile(0.75)),
+    p21_iqr=("p21", lambda x: x.quantile(0.75) - x.quantile(0.25)),
   ).reset_index()
 
   # Round fraction columns to 2 decimals
   fraction_cols = [
-    "encounter_mean", "encounter_std", "encounter_median", "encounter_q1", "encounter_q3", "encounter_iqr", "p21_mean",
-    "p21_median", "p21_q1", "p21_q3", "p21_iqr"
+    "encounter_mean",
+    "encounter_std",
+    "encounter_median",
+    "encounter_q1",
+    "encounter_q3",
+    "encounter_iqr",
+    "p21_mean",
+    "p21_median",
+    "p21_q1",
+    "p21_q3",
+    "p21_iqr",
   ]
   summary[fraction_cols] = summary[fraction_cols].round(2)
 
@@ -186,19 +193,22 @@ def summarize_yearly_overall(df: pd.DataFrame, output_dir: Path) -> pd.DataFrame
     encounter_q3 = node_yearly_totals.quantile(0.75)
     encounter_iqr = encounter_q3 - encounter_q1
 
-    summary.append({
-      "Year": int(year),
-      "Reporting Nodes": int(nodes_reporting),
-      "Observed Days": f"{observed_days_pct:.2f} (n={observed_days_total})",
-      "Total ED Encounters": f"{int(total_encounters):,}",
-      "Mean ± SD": (
-        f"{round(encounter_mean):,} ± {round(encounter_std):,}"
-        if pd.notna(encounter_std) else f"{round(encounter_mean):,} ± NA"
-      ),
-      "Median [Q1 – Q3]": f"{round(encounter_median):,} [{round(encounter_q1):,} – {round(encounter_q3):,}]",
-      "IQR": f"{round(encounter_iqr):,}",
-      "Inpatient outcomes linked": f"{percent_encounters_with_p21:.2f} (n={int(encounters_with_p21_total):,})",
-    })
+    summary.append(
+      {
+        "Year": int(year),
+        "Reporting Nodes": int(nodes_reporting),
+        "Observed Days": f"{observed_days_pct:.2f} (n={observed_days_total})",
+        "Total ED Encounters": f"{int(total_encounters):,}",
+        "Mean ± SD": (
+          f"{round(encounter_mean):,} ± {round(encounter_std):,}"
+          if pd.notna(encounter_std)
+          else f"{round(encounter_mean):,} ± NA"
+        ),
+        "Median [Q1 – Q3]": f"{round(encounter_median):,} [{round(encounter_q1):,} – {round(encounter_q3):,}]",
+        "IQR": f"{round(encounter_iqr):,}",
+        "Inpatient outcomes linked": f"{percent_encounters_with_p21:.2f} (n={int(encounters_with_p21_total):,})",
+      }
+    )
   summary_df = pd.DataFrame(summary)
 
   table_name = Path(__file__).stem + "2.csv"

@@ -45,15 +45,15 @@ RADIUS_GROWTH_PER_SITE = 0.015  # 0.015 deg is approx 1.5km growth per added nod
 
 def prepare_data(csv_file: Path, download_dir: Path) -> tuple[pd.Series, pd.DataFrame]:
   df = pd.read_csv(csv_file)
-  df['zipcode'] = df['zipcode'].astype(str).str.zfill(5).str.strip()
-  if 'state' in df.columns:
-    df['state'] = df['state'].astype(str).str.strip()
+  df["zipcode"] = df["zipcode"].astype(str).str.zfill(5).str.strip()
+  if "state" in df.columns:
+    df["state"] = df["state"].astype(str).str.strip()
   zipcode_path = download_file_if_needed(ZIPCODES_URL, download_dir, ZIPCODES_ZIPNAME)
   zipcode_df = load_csv_from_zip(zipcode_path, ZIPCODES_CSV_PATH)
-  zipcode_df['zipcode'] = zipcode_df['zipcode'].astype(str).str.zfill(5).str.strip()
-  zipcode_df = zipcode_df.drop_duplicates(subset=['zipcode'], keep='first')
-  nodes_with_coords = df.merge(zipcode_df[['zipcode', 'latitude', 'longitude']], on='zipcode', how='left')
-  valid_nodes = nodes_with_coords.dropna(subset=['latitude', 'longitude']).copy()
+  zipcode_df["zipcode"] = zipcode_df["zipcode"].astype(str).str.zfill(5).str.strip()
+  zipcode_df = zipcode_df.drop_duplicates(subset=["zipcode"], keep="first")
+  nodes_with_coords = df.merge(zipcode_df[["zipcode", "latitude", "longitude"]], on="zipcode", how="left")
+  valid_nodes = nodes_with_coords.dropna(subset=["latitude", "longitude"]).copy()
   dropped_count = len(df) - len(valid_nodes)
   if dropped_count > 0:
     print(f"WARNING: {dropped_count} sites were dropped due to invalid/missing ZIP coordinates.")
@@ -66,23 +66,20 @@ def perform_iterative_aggregation(nodes_df: pd.DataFrame) -> pd.DataFrame:
   Groups nodes using a graph-based connected components approach.
   Any nodes whose radii touch are merged into a single cluster
   """
-  valid_nodes = nodes_df.dropna(subset=['latitude', 'longitude']).copy()
+  valid_nodes = nodes_df.dropna(subset=["latitude", "longitude"]).copy()
   current_nodes = []
   for _, row in valid_nodes.iterrows():
-    current_nodes.append({
-      'lat': row['latitude'],
-      'lon': row['longitude'],
-      'count': 1
-    })
+    current_nodes.append({"lat": row["latitude"], "lon": row["longitude"], "count": 1})
 
   for it in range(ITERATIONS):
     n = len(current_nodes)
-    if n == 0: break
+    if n == 0:
+      break
 
     # 1. Update Radii based on current counts
     for node in current_nodes:
       # Linear growth of radius based on count
-      node['r'] = BASE_RADIUS_DEG + (node['count'] * RADIUS_GROWTH_PER_SITE)
+      node["r"] = BASE_RADIUS_DEG + (node["count"] * RADIUS_GROWTH_PER_SITE)
 
     # 2. Build Adjacency List (Who touches whom?)
     adj = {i: [] for i in range(n)}
@@ -94,15 +91,15 @@ def perform_iterative_aggregation(nodes_df: pd.DataFrame) -> pd.DataFrame:
 
         # Longitude correction (approx for Germany's latitude)
         # This prevents circles from looking like ovals in calculations
-        mean_lat = (n1['lat'] + n2['lat']) / 2.0
+        mean_lat = (n1["lat"] + n2["lat"]) / 2.0
         lon_scale = math.cos(math.radians(mean_lat))
 
-        d_lat = abs(n1['lat'] - n2['lat'])
-        d_lon = abs(n1['lon'] - n2['lon']) * lon_scale
-        dist = math.sqrt(d_lat ** 2 + d_lon ** 2)
+        d_lat = abs(n1["lat"] - n2["lat"])
+        d_lon = abs(n1["lon"] - n2["lon"]) * lon_scale
+        dist = math.sqrt(d_lat**2 + d_lon**2)
 
         # Check intersection: Distance < Sum of Radii
-        if dist < (n1['r'] + n2['r']):
+        if dist < (n1["r"] + n2["r"]):
           adj[i].append(j)
           adj[j].append(i)
 
@@ -130,7 +127,7 @@ def perform_iterative_aggregation(nodes_df: pd.DataFrame) -> pd.DataFrame:
       # 4. Create the Merged Node
       if len(cluster_indices) == 1:
         old = current_nodes[i]
-        next_nodes.append({'lat': old['lat'], 'lon': old['lon'], 'count': old['count']})
+        next_nodes.append({"lat": old["lat"], "lon": old["lon"], "count": old["count"]})
       else:
         sum_lat = 0.0
         sum_lon = 0.0
@@ -138,16 +135,12 @@ def perform_iterative_aggregation(nodes_df: pd.DataFrame) -> pd.DataFrame:
 
         for idx_c in cluster_indices:
           node = current_nodes[idx_c]
-          w = node['count']
-          sum_lat += node['lat'] * w
-          sum_lon += node['lon'] * w
+          w = node["count"]
+          sum_lat += node["lat"] * w
+          sum_lon += node["lon"] * w
           total_count += w
 
-        next_nodes.append({
-          'lat': sum_lat / total_count,
-          'lon': sum_lon / total_count,
-          'count': total_count
-        })
+        next_nodes.append({"lat": sum_lat / total_count, "lon": sum_lon / total_count, "count": total_count})
 
     # Convergence Check
     if len(next_nodes) == len(current_nodes):
@@ -159,6 +152,7 @@ def perform_iterative_aggregation(nodes_df: pd.DataFrame) -> pd.DataFrame:
 
 
 from shapely.geometry import Point
+
 
 def plot_network_map(gdf: gpd.GeoDataFrame, nodes_df: pd.DataFrame, output_dir: Path):
   output_dir.mkdir(parents=True, exist_ok=True)
@@ -184,41 +178,30 @@ def plot_network_map(gdf: gpd.GeoDataFrame, nodes_df: pd.DataFrame, output_dir: 
       berlin_geom = berlin_geom.iloc[0]
 
       pts = gpd.GeoDataFrame(
-          agg_nodes.copy(),
-          geometry=[Point(xy) for xy in zip(agg_nodes["lon"], agg_nodes["lat"])],
-          crs=gdf.crs
+        agg_nodes.copy(), geometry=[Point(xy) for xy in zip(agg_nodes["lon"], agg_nodes["lat"])], crs=gdf.crs
       )
       # drop any aggregated nodes that are within Berlin
       pts = pts[~pts.within(berlin_geom)]
       agg_nodes = pd.DataFrame(pts.drop(columns=["geometry"]))
 
   if not agg_nodes.empty:
-    agg_nodes['logic_radius'] = BASE_RADIUS_DEG + (agg_nodes['count'] * RADIUS_GROWTH_PER_SITE)
-    sizes = (agg_nodes['logic_radius'] ** 2) * 25000
+    agg_nodes["logic_radius"] = BASE_RADIUS_DEG + (agg_nodes["count"] * RADIUS_GROWTH_PER_SITE)
+    sizes = (agg_nodes["logic_radius"] ** 2) * 25000
 
-    ax.scatter(
-        agg_nodes['lon'],
-        agg_nodes['lat'],
-        s=sizes,
-        c='blue',
-        alpha=0.6,
-        edgecolors='white',
-        linewidth=1.0,
-        zorder=5
-    )
+    ax.scatter(agg_nodes["lon"], agg_nodes["lat"], s=sizes, c="blue", alpha=0.6, edgecolors="white", linewidth=1.0, zorder=5)
 
     for _, row in agg_nodes.iterrows():
-      if row['count'] > 1:
+      if row["count"] > 1:
         ax.text(
-            row['lon'],
-            row['lat'],
-            str(int(row['count'])),
-            fontsize=9,
-            ha='center',
-            va='center',
-            color='white',
-            weight='bold',
-            zorder=6
+          row["lon"],
+          row["lat"],
+          str(int(row["count"])),
+          fontsize=9,
+          ha="center",
+          va="center",
+          color="white",
+          weight="bold",
+          zorder=6,
         )
 
   # --- 3. State Count Labels ---
@@ -246,20 +229,15 @@ def plot_network_map(gdf: gpd.GeoDataFrame, nodes_df: pd.DataFrame, output_dir: 
       pad = 0.18
 
     ax.annotate(
-        text=str(count),
-        xy=xy,
-        ha="center", va="center",
-        fontsize=fs,
-        color="black",
-        weight="bold",
-        zorder=10,
-        bbox=dict(
-            boxstyle=f"circle,pad={pad}",
-            fc="white",
-            ec="black",
-            lw=0.5,
-            alpha=1.0
-        )
+      text=str(count),
+      xy=xy,
+      ha="center",
+      va="center",
+      fontsize=fs,
+      color="black",
+      weight="bold",
+      zorder=10,
+      bbox=dict(boxstyle=f"circle,pad={pad}", fc="white", ec="black", lw=0.5, alpha=1.0),
     )
 
   plt.tight_layout()
@@ -281,7 +259,7 @@ def download_file_if_needed(url: str, download_dir: Path, filename: str) -> Path
 
 
 def load_csv_from_zip(zip_path, target_filename):
-  with zipfile.ZipFile(zip_path, 'r') as z:
+  with zipfile.ZipFile(zip_path, "r") as z:
     for name in z.namelist():
       if name.endswith(target_filename):
         with z.open(name) as f:
