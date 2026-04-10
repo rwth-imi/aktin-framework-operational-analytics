@@ -16,7 +16,7 @@
 """
 Created on 7/3/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.1
+@VERSION=1.2
 """
 
 from pathlib import Path
@@ -29,6 +29,9 @@ import pandas as pd
 import seaborn as sns
 
 from helper.paths import get_base_csv_file, get_output_dir
+
+# nodes with monitored_since after the cutoff are ignored
+CUTOFF_DATE = "01-04-2026"
 
 
 def parse_date(date: str) -> pd.Timestamp | None:
@@ -57,7 +60,12 @@ def create_cumulative_counts_dataframe(csv_file: Path) -> pd.DataFrame:
 
   # Parse Monitored Data (Real data 2022+)
   df["monitored_since"] = df["monitored_since"].apply(parse_date)
+
+  # Apply cutoff
+  cutoff = pd.to_datetime(CUTOFF_DATE, format="%d-%m-%Y")
   monitored_since = df.dropna(subset=["monitored_since"])
+  monitored_since = monitored_since[monitored_since["monitored_since"] <= cutoff]
+
   monitored_counts = monitored_since.groupby(monitored_since["monitored_since"].dt.date).size().sort_index().cumsum()
   monitored_counts.index = pd.to_datetime(monitored_counts.index)
   real_df = pd.DataFrame({"date": monitored_counts.index, "Cumulative_EDs": monitored_counts.values})
@@ -71,7 +79,8 @@ def create_cumulative_counts_dataframe(csv_file: Path) -> pd.DataFrame:
     "2021-01-01": 46,
     "2022-01-01": 50,
   }
-  manual_df = pd.DataFrame({"date": pd.to_datetime(list(manual_data.keys())), "Cumulative_EDs": list(manual_data.values())})
+  manual_df = pd.DataFrame(
+      {"date": pd.to_datetime(list(manual_data.keys())), "Cumulative_EDs": list(manual_data.values())})
   final_df = pd.concat([manual_df, real_df]).sort_values("date").reset_index(drop=True)
   return final_df
 
@@ -92,13 +101,13 @@ def plot_cumulative_ed_trends(df_plot: pd.DataFrame, output_dir: Path):
   interpolated_y = np.interp(target_nums, x_nums, y_values)
   valid_mask = (target_nums >= x_nums.min()) & (target_nums <= x_nums.max())
   ax.scatter(
-    x=np.array(year_starts)[valid_mask],
-    y=interpolated_y[valid_mask],
-    color="#2c7bb6",
-    s=60,
-    zorder=5,
-    edgecolor="white",
-    linewidth=0.5,
+      x=np.array(year_starts)[valid_mask],
+      y=interpolated_y[valid_mask],
+      color="#2c7bb6",
+      s=60,
+      zorder=5,
+      edgecolor="white",
+      linewidth=0.5,
   )
 
   # Axes Configuration
@@ -117,14 +126,14 @@ def plot_cumulative_ed_trends(df_plot: pd.DataFrame, output_dir: Path):
   start_date = pd.to_datetime("2022-01-28")
   ax.vlines(start_date, 0, df_plot["Cumulative_EDs"].max() * 0.75, color="#ff7f0e", lw=2, linestyle="--")
   ax.annotate(
-    "Start of Monitoring",
-    xy=(start_date, df_plot["Cumulative_EDs"].max() * 0.75),
-    xytext=(0, 5),
-    textcoords="offset points",
-    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#ff7f0e", lw=1.5),
-    fontsize=12,
-    ha="center",
-    color="#333333",
+      "Start of Monitoring",
+      xy=(start_date, df_plot["Cumulative_EDs"].max() * 0.75),
+      xytext=(0, 5),
+      textcoords="offset points",
+      bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#ff7f0e", lw=1.5),
+      fontsize=12,
+      ha="center",
+      color="#333333",
   )
   plt.tight_layout()
   plot_name = Path(__file__).stem + ".svg"
