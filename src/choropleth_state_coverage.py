@@ -36,7 +36,7 @@ GEOJSON_FILENAME = "germany.geojson"
 
 ZIPCODES_URL = "https://github.com/zauberware/postal-codes-json-xml-csv/raw/refs/heads/master/data/DE.zip"
 ZIPCODES_ZIPNAME = "de.zip"
-ZIPCODES_CSV_PATH = "DE/zipcodes.de.csv"
+ZIPCODES_CSV_PATH = "zipcodes.de.csv"
 
 ITERATIONS = 5
 BASE_RADIUS_DEG = 0.06  # 0.06 deg is approx 6-7km in Germany
