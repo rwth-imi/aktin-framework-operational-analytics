@@ -16,7 +16,7 @@
 """
 Created on 7/8/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=2.0
+@VERSION=2.1
 """
 
 from pathlib import Path
@@ -35,6 +35,9 @@ LANE_POSITIONS = {"docker": 4, "deb": 3, "j2ee": 2, "broker": 1}
 PATCH_OFFSET = 0.125
 STAGGER_MAIN_OFFSET = 0.5
 
+# releases after the cutoff are ignored
+CUTOFF_DATE = "2026-04-01"
+
 
 def load_and_clean_csv(csv_file: Path) -> pd.DataFrame:
   """
@@ -43,6 +46,10 @@ def load_and_clean_csv(csv_file: Path) -> pd.DataFrame:
   df = pd.read_csv(csv_file)
   df["release_date"] = pd.to_datetime(df["release_date"], errors="coerce")
   df = df.dropna(subset=["release_date"])
+
+  cutoff = pd.to_datetime(CUTOFF_DATE, format="%Y-%m-%d")
+  df = df[df["release_date"] <= cutoff]
+
   return df
 
 
@@ -151,14 +158,14 @@ def plot_release_timeline(df: pd.DataFrame, output_dir: Path):
       xytext = (0, 10)
       bbox_props = dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7, ec=color, lw=1.5)
     ax.annotate(
-      version,
-      xy=(x, y_plot),
-      xytext=xytext,
-      textcoords="offset points",
-      bbox=bbox_props,
-      fontsize=12,
-      ha="center",
-      color="black",
+        version,
+        xy=(x, y_plot),
+        xytext=xytext,
+        textcoords="offset points",
+        bbox=bbox_props,
+        fontsize=12,
+        ha="center",
+        color="black",
     )
   start = df["release_date"].min()
   end = df["release_date"].max()
@@ -166,7 +173,7 @@ def plot_release_timeline(df: pd.DataFrame, output_dir: Path):
   # Baseline
   ax.hlines(y=0, xmin=pd.Timestamp(f"{start.year}-01-01"), xmax=end, color="black", lw=2)
   ax.annotate(
-    "", xy=(end + pd.Timedelta(days=60), 0), xytext=(end, 0), arrowprops=dict(arrowstyle="->", color="black", lw=1.5)
+      "", xy=(end + pd.Timedelta(days=60), 0), xytext=(end, 0), arrowprops=dict(arrowstyle="->", color="black", lw=1.5)
   )
 
   # Limits & Axis
@@ -179,14 +186,14 @@ def plot_release_timeline(df: pd.DataFrame, output_dir: Path):
   for year in years:
     ax.vlines(year, -0.1, 0.1, color="black", lw=1)
     ax.annotate(
-      str(year.year),
-      xy=(year, 0),
-      xytext=(0, -15),
-      textcoords="offset points",
-      ha="center",
-      va="top",
-      fontsize=14,
-      fontweight="bold",
+        str(year.year),
+        xy=(year, 0),
+        xytext=(0, -15),
+        textcoords="offset points",
+        ha="center",
+        va="top",
+        fontsize=14,
+        fontweight="bold",
     )
 
   # Labels
@@ -194,14 +201,14 @@ def plot_release_timeline(df: pd.DataFrame, output_dir: Path):
   for type_key, y_pos in LANE_POSITIONS.items():
     if type_key in DISPLAY_NAMES and type_key in TYPE_COLORS:
       ax.text(
-        min_date - pd.Timedelta(days=160),
-        y_pos,
-        DISPLAY_NAMES[type_key],
-        color=TYPE_COLORS[type_key],
-        fontsize=14,
-        fontweight="bold",
-        ha="right",
-        va="center",
+          min_date - pd.Timedelta(days=160),
+          y_pos,
+          DISPLAY_NAMES[type_key],
+          color=TYPE_COLORS[type_key],
+          fontsize=14,
+          fontweight="bold",
+          ha="right",
+          va="center",
       )
 
   plt.tight_layout()

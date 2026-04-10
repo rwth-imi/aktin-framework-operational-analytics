@@ -25,7 +25,10 @@ from typing import List
 
 import pandas as pd
 
-from helper.paths import get_downloads_dir, get_output_dir, get_base_csv_file, get_releases_csv_file
+from helper.paths import get_base_csv_file, get_downloads_dir, get_output_dir, get_releases_csv_file
+
+# log entries after the cutoff are ignored
+CUTOFF_DATE = "2026-04-01"
 
 
 def extract_node_id_from_path(file_path: Path) -> str:
@@ -46,11 +49,11 @@ def find_files(downloads_dir: Path, keyword: str, suffix: str) -> List[Path]:
   Searches all node directories in the downloads folder and returns a list of file paths with given keyword.
   """
   return sorted(
-    file
-    for node_dir in downloads_dir.iterdir()
-    if node_dir.is_dir()
-    for file in node_dir.iterdir()
-    if file.is_file() and keyword in file.name and file.suffix == suffix
+      file
+      for node_dir in downloads_dir.iterdir()
+      if node_dir.is_dir()
+      for file in node_dir.iterdir()
+      if file.is_file() and keyword in file.name and file.suffix == suffix
   )
 
 
@@ -68,6 +71,7 @@ def create_updates_df(downloads_dir: Path) -> pd.DataFrame:
   and timestamps.
   """
   rows = []
+  cutoff = pd.to_datetime(CUTOFF_DATE, format="%Y-%m-%d").date()
   for file_path in find_all_version_logs(downloads_dir):
     node_id = extract_node_id_from_path(file_path)
     entry = {"node_id": node_id}
@@ -76,9 +80,14 @@ def create_updates_df(downloads_dir: Path) -> pd.DataFrame:
         if "dwh-j2ee" in line or "ear" in line:
           parts = line.strip().split(" : ")
           if len(parts) >= 2:
-            timestamp = parts[0].split(" ")[0]  # YYYY-MM-DD
+            timestamp_str = parts[0]
+            timestamp = pd.to_datetime(timestamp_str, utc=True, errors="coerce")
+            if pd.isna(timestamp):
+              continue
+            if timestamp.date() > cutoff:
+              continue
             transition = parts[1].split("]")[-1].strip()
-            entry[transition] = timestamp
+            entry[transition] = timestamp.date().isoformat()
     rows.append(entry)
   return pd.DataFrame(rows)
 
@@ -161,7 +170,7 @@ def summarize_j2ee_updates(df: pd.DataFrame, output_dir: Path) -> None:
       return "other"
     if "1.5.1" in val:
       return "1.5.1"
-    elif "1.6" in val:
+    if "1.6" in val:
       return "1.6"
     return "other"
 
