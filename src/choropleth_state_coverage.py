@@ -28,6 +28,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import requests
+from shapely.geometry import Point
 
 from helper.paths import get_base_csv_file, get_output_dir, get_downloads_dir
 
@@ -42,12 +43,22 @@ ITERATIONS = 5
 BASE_RADIUS_DEG = 0.06  # 0.06 deg is approx 6-7km in Germany
 RADIUS_GROWTH_PER_SITE = 0.015  # 0.015 deg is approx 1.5km growth per added node
 
+# nodes with monitored_since after the cutoff are ignored
+CUTOFF_DATE = "01-04-2026"
+
 
 def prepare_data(csv_file: Path, download_dir: Path) -> tuple[pd.Series, pd.DataFrame]:
   df = pd.read_csv(csv_file)
   df["zipcode"] = df["zipcode"].astype(str).str.zfill(5).str.strip()
   if "state" in df.columns:
     df["state"] = df["state"].astype(str).str.strip()
+
+  if "monitored_since" in df.columns:
+    df["monitored_since"] = pd.to_datetime(df["monitored_since"], format="%d-%m-%Y", errors="coerce")
+    cutoff = pd.to_datetime(CUTOFF_DATE, format="%d-%m-%Y")
+    df = df[df["monitored_since"].notna()]
+    df = df[df["monitored_since"] <= cutoff]
+
   zipcode_path = download_file_if_needed(ZIPCODES_URL, download_dir, ZIPCODES_ZIPNAME)
   zipcode_df = load_csv_from_zip(zipcode_path, ZIPCODES_CSV_PATH)
   zipcode_df["zipcode"] = zipcode_df["zipcode"].astype(str).str.zfill(5).str.strip()
@@ -96,7 +107,7 @@ def perform_iterative_aggregation(nodes_df: pd.DataFrame) -> pd.DataFrame:
 
         d_lat = abs(n1["lat"] - n2["lat"])
         d_lon = abs(n1["lon"] - n2["lon"]) * lon_scale
-        dist = math.sqrt(d_lat**2 + d_lon**2)
+        dist = math.sqrt(d_lat ** 2 + d_lon ** 2)
 
         # Check intersection: Distance < Sum of Radii
         if dist < (n1["r"] + n2["r"]):
@@ -151,9 +162,6 @@ def perform_iterative_aggregation(nodes_df: pd.DataFrame) -> pd.DataFrame:
   return pd.DataFrame(current_nodes)
 
 
-from shapely.geometry import Point
-
-
 def plot_network_map(gdf: gpd.GeoDataFrame, nodes_df: pd.DataFrame, output_dir: Path):
   output_dir.mkdir(parents=True, exist_ok=True)
   fig, ax = plt.subplots(figsize=(12, 12))
@@ -178,7 +186,7 @@ def plot_network_map(gdf: gpd.GeoDataFrame, nodes_df: pd.DataFrame, output_dir: 
       berlin_geom = berlin_geom.iloc[0]
 
       pts = gpd.GeoDataFrame(
-        agg_nodes.copy(), geometry=[Point(xy) for xy in zip(agg_nodes["lon"], agg_nodes["lat"])], crs=gdf.crs
+          agg_nodes.copy(), geometry=[Point(xy) for xy in zip(agg_nodes["lon"], agg_nodes["lat"])], crs=gdf.crs
       )
       # drop any aggregated nodes that are within Berlin
       pts = pts[~pts.within(berlin_geom)]
@@ -188,24 +196,25 @@ def plot_network_map(gdf: gpd.GeoDataFrame, nodes_df: pd.DataFrame, output_dir: 
     agg_nodes["logic_radius"] = BASE_RADIUS_DEG + (agg_nodes["count"] * RADIUS_GROWTH_PER_SITE)
     sizes = (agg_nodes["logic_radius"] ** 2) * 25000
 
-    ax.scatter(agg_nodes["lon"], agg_nodes["lat"], s=sizes, c="blue", alpha=0.6, edgecolors="white", linewidth=1.0, zorder=5)
+    ax.scatter(agg_nodes["lon"], agg_nodes["lat"], s=sizes, c="blue", alpha=0.6, edgecolors="white", linewidth=1.0,
+               zorder=5)
 
     for _, row in agg_nodes.iterrows():
       if row["count"] > 1:
         ax.text(
-          row["lon"],
-          row["lat"],
-          str(int(row["count"])),
-          fontsize=9,
-          ha="center",
-          va="center",
-          color="white",
-          weight="bold",
-          zorder=6,
+            row["lon"],
+            row["lat"],
+            str(int(row["count"])),
+            fontsize=9,
+            ha="center",
+            va="center",
+            color="white",
+            weight="bold",
+            zorder=6,
         )
 
   # --- 3. State Count Labels ---
-  for idx, row in gdf.iterrows():
+  for _, row in gdf.iterrows():
     count = int(row["site_count"])
     if count <= 0:
       continue
@@ -229,15 +238,15 @@ def plot_network_map(gdf: gpd.GeoDataFrame, nodes_df: pd.DataFrame, output_dir: 
       pad = 0.18
 
     ax.annotate(
-      text=str(count),
-      xy=xy,
-      ha="center",
-      va="center",
-      fontsize=fs,
-      color="black",
-      weight="bold",
-      zorder=10,
-      bbox=dict(boxstyle=f"circle,pad={pad}", fc="white", ec="black", lw=0.5, alpha=1.0),
+        text=str(count),
+        xy=xy,
+        ha="center",
+        va="center",
+        fontsize=fs,
+        color="black",
+        weight="bold",
+        zorder=10,
+        bbox=dict(boxstyle=f"circle,pad={pad}", fc="white", ec="black", lw=0.5, alpha=1.0),
     )
 
   plt.tight_layout()
