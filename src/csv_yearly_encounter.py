@@ -16,7 +16,7 @@
 """
 Created on 7/4/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.2
+@VERSION=1.3
 """
 
 import zipfile
@@ -29,6 +29,9 @@ from helper.paths import get_output_dir, get_downloads_dir
 
 REQUEST_IDS = ["3047", "3077", "3086", "3100", "3105", "3114", "3191", "3233", "3299"]
 
+# rows with date after the cutoff are ignored
+CUTOFF_DATE = "2026-04-01"
+
 
 def create_daily_encounter_df(zip_file: Path) -> pd.DataFrame:
   """
@@ -36,6 +39,7 @@ def create_daily_encounter_df(zip_file: Path) -> pd.DataFrame:
   the node_id. Combines all sites into one DataFrame.
   """
   results = []
+  cutoff = pd.to_datetime(CUTOFF_DATE, format="%Y-%m-%d")
   with zipfile.ZipFile(zip_file, "r") as parent_zip:
     for name in parent_zip.namelist():
       if name.endswith("_result.zip"):
@@ -46,6 +50,11 @@ def create_daily_encounter_df(zip_file: Path) -> pd.DataFrame:
           with zipfile.ZipFile(inner_zip_file) as inner_zip:
             with inner_zip.open("result.txt") as result_file:
               df = pd.read_csv(result_file, sep="\t")
+
+              # Parse and filter date
+              df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
+              df = df[df["date"].notna()]
+              df = df[df["date"] <= cutoff]
 
               # Keep only relevant columns and rename for clarity
               df = df[["date", "eingegangene_faelle", "p21_fall"]].copy()
@@ -87,7 +96,7 @@ def aggregate_daily_to_monthly(df: pd.DataFrame) -> pd.DataFrame:
 
   grouped = df.groupby(["node_id", "month"])
   agg_df = grouped.agg(
-    encounter=("encounter", "sum"), p21=("p21", "sum"), days_with_encounter=("encounter", lambda x: (x > 0).sum())
+      encounter=("encounter", "sum"), p21=("p21", "sum"), days_with_encounter=("encounter", lambda x: (x > 0).sum())
   ).reset_index()
 
   agg_df["days_in_month"] = agg_df["month"].dt.to_timestamp().dt.days_in_month
@@ -169,6 +178,7 @@ def summarize_yearly_overall(df: pd.DataFrame, output_dir: Path) -> pd.DataFrame
 
   df["year"] = df["month"].dt.year
   summary = []
+
   for year, group in df.groupby("year"):
     nodes_reporting = group["node_id"].nunique()
 

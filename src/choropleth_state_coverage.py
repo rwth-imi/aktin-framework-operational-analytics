@@ -16,7 +16,7 @@
 """
 Created on 7/3/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-d@VERSION=2.0
+@VERSION=2.1
 """
 
 import json
