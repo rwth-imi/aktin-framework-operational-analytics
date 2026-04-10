@@ -16,7 +16,7 @@
 """
 Created on 7/3/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.0
+@VERSION=1.1
 """
 
 from pathlib import Path
@@ -25,6 +25,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from helper.paths import get_base_csv_file, get_output_dir
+
+# nodes with monitored_since after the cutoff are ignored
+CUTOFF_DATE = "01-04-2026"
 
 
 def normalize_edis_name(edis: str) -> str:
@@ -50,11 +53,20 @@ def normalize_edis_name(edis: str) -> str:
   return mapping.get(edis.lower(), edis.capitalize())
 
 
-def get_edis_counts(csv_file: Path) -> pd.Series:
+def get_edis_counts(csv_file: Path, cutoff_date: str | None = None) -> pd.Series:
   """
   Load the CSV and count how many sites use each EDIS. Rare systems (<= 2) and unknowns (???) are grouped into "Other".
   """
   df = pd.read_csv(csv_file)
+
+  # Parse monitored_since as day-first dates like 28-01-2022
+  df["monitored_since"] = pd.to_datetime(df["monitored_since"], format="%d-%m-%Y", errors="coerce")
+
+  # Apply cutoff if provided
+  if cutoff_date is not None:
+    cutoff = pd.to_datetime(cutoff_date, format="%d-%m-%Y")
+    df = df[df["monitored_since"].notna()]
+    df = df[df["monitored_since"] <= cutoff]
 
   # Normalize names and handle unknowns
   df["edis_clean"] = df["edis"].apply(lambda x: "Unreported" if x == "???" else normalize_edis_name(x))
@@ -112,6 +124,7 @@ def plot_barchart(edis_counts: pd.Series, output_dir: Path):
     pct = (width / total) * 100
     label = f"{int(width)} ({pct:.1f}%)"
     ax.text(width + 0.5, bar.get_y() + bar.get_height() / 2, label, va="center", fontsize=12)
+
   ax.spines["top"].set_visible(False)
   ax.spines["right"].set_visible(False)
   ax.grid(axis="x", linestyle="--", alpha=0.5)
@@ -128,7 +141,7 @@ def plot_barchart(edis_counts: pd.Series, output_dir: Path):
 def main():
   csv_file = get_base_csv_file()
   output_dir = get_output_dir()
-  edis_counts = get_edis_counts(csv_file)
+  edis_counts = get_edis_counts(csv_file, CUTOFF_DATE)
   plot_piechart(edis_counts, output_dir)
   plot_barchart(edis_counts, output_dir)
 
