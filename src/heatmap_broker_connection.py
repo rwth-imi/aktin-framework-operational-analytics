@@ -16,7 +16,7 @@
 """
 Created on 7/3/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.01
+@VERSION=1.1
 """
 
 from pathlib import Path
@@ -27,6 +27,9 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 from helper.paths import get_downloads_dir, get_output_dir
+
+# rows with date after the cutoff are ignored
+CUTOFF_DATE = "2026-04-01"
 
 
 def find_all_stats_csv(downloads_dir: Path) -> List[Path]:
@@ -57,6 +60,9 @@ def preprocess_df(csv_file: Path) -> pd.DataFrame:
   df["date"] = df["date"].apply(lambda x: pd.to_datetime(x, utc=True))
   df["last_contact"] = df["last_contact"].apply(lambda x: pd.to_datetime(x, utc=True))
   df = df.dropna(subset=["date", "last_contact"])
+
+  cutoff = pd.to_datetime(CUTOFF_DATE, format="%Y-%m-%d", utc=True)
+  df = df[df["date"] <= cutoff]
   return df
 
 
@@ -117,7 +123,7 @@ def get_or_create_combined_df(downloads_dir: Path) -> pd.DataFrame:
   Checks if a cached combined DataFrame exists in /tmp/. If yes, loads it. If not, computes it, stores it in /tmp/,
   and returns it.
   """
-  cache_file = downloads_dir / "combined_connection_df.csv"
+  cache_file = downloads_dir / f"combined_connection_df_{CUTOFF_DATE}.csv"
   if cache_file.exists():
     print(f"Loading cached DataFrame from {cache_file}")
     combined_df = pd.read_csv(cache_file)
