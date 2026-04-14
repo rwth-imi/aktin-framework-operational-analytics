@@ -1,0 +1,10 @@
+Nodes per version:
+1.5.1: 27 nodes (27.55%)
+1.6: 71 nodes (70.41%)
+other: 2 nodes (2.04%)
+
+Update timing to 1.6 of 61 nodes:
+Mean days: 227.28
+Median days: 200.00
+Q1: 166.00
+Q3: 320.00
