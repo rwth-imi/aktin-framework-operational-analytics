@@ -24,10 +24,10 @@ from typing import List
 
 import pandas as pd
 
-from helper.paths import get_base_csv_file, get_downloads_dir, get_output_dir, get_releases_csv_file
+from helper.paths import get_base_csv_file, get_downloads_dir, get_output_dir, get_releases_csv_file, get_derived_dir
 
 # log entries after the cutoff are ignored
-CUTOFF_DATE = "2025-05-01"
+CUTOFF_DATE = "2026-04-01"
 
 
 def extract_node_id_from_path(file_path: Path) -> str:
@@ -225,6 +225,19 @@ def merge_node_data(current_versions_df: pd.DataFrame,
   return df.sort_values("node_id").reset_index(drop=True)
 
 
+def apply_cutoff_filter(merged_df: pd.DataFrame) -> pd.DataFrame:
+  df = merged_df.copy()
+
+  if "monitored_since" in df.columns:
+    df["monitored_since"] = pd.to_datetime(df["monitored_since"], dayfirst=True, errors="coerce")
+    cutoff = pd.to_datetime(CUTOFF_DATE)
+
+    # Behalte nur Zeilen, die kleiner/gleich dem Cutoff sind oder NaT (fehlend)
+    df = df[~(df["monitored_since"] > cutoff)]
+
+  return df.reset_index(drop=True)
+
+
 def get_major_releases_map(csv_path: Path) -> dict:
   df = pd.read_csv(csv_path, names=["version", "date", "type", "state"])
 
@@ -260,6 +273,95 @@ def get_major_releases_map(csv_path: Path) -> dict:
   return releases_map
 
 
+def calculate_update_delay(df: pd.DataFrame, releases_map: dict) -> pd.DataFrame:
+  df = df.copy()
+  versions = ["1.5.1", "1.6", "1.7"]
+
+  for v in versions:
+    date_col = f"to{v}"
+    state_col = f"state{v}"
+    days_col = f"daysTo{v}"
+
+    if date_col in df.columns and state_col in df.columns and v in releases_map:
+      # Update-Datum umwandeln
+      df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+
+      # Release-Datum basierend auf dem State der Zeile mappen
+      release_dates = df[state_col].map(releases_map[v])
+      release_dates = pd.to_datetime(release_dates, errors="coerce")
+
+      # Differenz in Tagen berechnen
+      df[days_col] = (df[date_col] - release_dates).dt.days
+
+  return df
+
+
+def generate_statistics_summary(df: pd.DataFrame, output_path: Path = None) -> str:
+  lines = []
+  df_clean = df.copy()
+
+  def normalize_version(val):
+    if pd.isna(val) or val == "":
+      return "unknown"
+    val_str = str(val)
+    if "1.5" in val_str:
+      return "1.5.1"
+    if "1.6" in val_str:
+      return "1.6"
+    if "1.7" in val_str:
+      return "1.7"
+    return "unknown"
+
+  df_clean["version_group"] = df_clean["current_version"].apply(normalize_version)
+  total_nodes = len(df_clean)
+  version_order = ["1.5.1", "1.6", "1.7", "unknown"]
+
+  lines.append("Nodes per version:")
+  for version in version_order:
+    v_df = df_clean[df_clean["version_group"] == version]
+    count = len(v_df)
+    if count == 0:
+      continue
+
+    pct = (count / total_nodes) * 100
+
+    state_str = ""
+    # Aufschlüsselung nach State nur, wenn die Version bekannt ist
+    if version != "unknown":
+      state_counts = v_df["current_state"].value_counts().to_dict()
+      state_details = []
+      for state, s_count in state_counts.items():
+        if pd.notna(state):
+          state_details.append(f"{s_count} {state}")
+
+      state_str = f" - {', '.join(state_details)}" if state_details else ""
+
+    lines.append(f"{version}: {count} nodes ({pct:.2f}%){state_str}")
+
+  def append_timing(series: pd.Series, label: str):
+    values = series.dropna()
+    count = len(values)
+    if count == 0:
+      return
+    lines.append("")
+    lines.append(f"Update timing for {label} of {count} nodes:")
+    lines.append(f"Mean days: {values.mean():.2f}")
+    lines.append(f"Median days: {values.median():.2f}")
+    lines.append(f"Q1: {values.quantile(0.25):.2f}")
+    lines.append(f"Q3: {values.quantile(0.75):.2f}")
+
+  if "daysTo1.6" in df_clean.columns:
+    append_timing(df_clean["daysTo1.6"], "1.6")
+  if "daysTo1.7" in df_clean.columns:
+    append_timing(df_clean["daysTo1.7"], "1.7")
+
+  summary_name = Path(__file__).stem + ".txt"
+  output_file = get_output_dir() / summary_name
+  output_file.write_text("\n".join(lines), encoding="utf-8")
+  derived_file = get_derived_dir() / summary_name
+  derived_file.write_text("\n".join(lines), encoding="utf-8")
+
+
 def main():
   base_csv = get_base_csv_file()
   releases_csv = get_releases_csv_file()
@@ -267,8 +369,6 @@ def main():
   output_dir = get_output_dir()
 
   df = create_updates_df(downloads_dir)
-
-  print(df.to_string())
 
   pivoted_df = pivot_updates(df)
 
@@ -278,9 +378,11 @@ def main():
 
   merged_df = merge_node_data(current_versions_df, pivoted_df, monitoring_df)
   merged_df = apply_cutoff_filter(merged_df)
-  print(merged_df.to_string())
 
   releases = get_major_releases_map(releases_csv)
+  merged_df = calculate_update_delay(merged_df, releases)
+
+  generate_statistics_summary(merged_df)
 
 
 if __name__ == "__main__":
