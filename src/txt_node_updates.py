@@ -16,7 +16,7 @@
 """
 Created on 7/10/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.2
+@VERSION=1.2.1
 """
 
 import json
@@ -235,30 +235,26 @@ def append_timing_summary(lines: list[str], series: pd.Series, label: str) -> No
 
 def summarize_j2ee_updates(df: pd.DataFrame, output_dir: Path) -> None:
   """
-  Adds nodes with empty 'current' to the version 1.7 count. Calculates absolute and percentage distribution
-  per version, computes summary statistics for update timing, and saves the results to a text file.
+  Calculates absolute and percentage distribution per version, keeping missing current
+  versions as 'unknown', computes summary statistics for update timing, and saves the
+  results to a text file.
   """
 
   def normalize_version(val):
     if pd.isna(val):
-      return "other"
+      return "unknown"
     if "1.5.1" in val:
       return "1.5.1"
     if "1.6" in val:
       return "1.6"
     if "1.7" in val:
       return "1.7"
-    return "other"
+    raise ValueError(f"Unexpected current version value: {val}")
 
-  no_current = df["current"].isna().sum()
-  df_clean = df[df["current"].notna()].copy()
+  df_clean = df.copy()
   df_clean["version_group"] = df_clean["current"].apply(normalize_version)
-  version_order = ["1.5.1", "1.6", "1.7", "other"]
+  version_order = ["1.5.1", "1.6", "1.7", "unknown"]
   counts = df_clean["version_group"].value_counts().reindex(version_order, fill_value=0)
-
-  # Keep previous behavior of assigning nodes without current version to the newest release bucket
-  counts["1.7"] += no_current
-
   total = counts.sum()
   percentages = (counts / total * 100).round(2)
   lines = ["Nodes per version:"]
@@ -266,6 +262,7 @@ def summarize_j2ee_updates(df: pd.DataFrame, output_dir: Path) -> None:
     lines.append(f"{version}: {counts[version]} nodes ({percentages[version]}%)")
   append_timing_summary(lines, df_clean["daysTo1.6"], "1.6")
   append_timing_summary(lines, df_clean["daysTo1.7"], "1.7")
+
   summary_name = Path(__file__).stem + ".txt"
   output_file = output_dir / summary_name
   output_file.write_text("\n".join(lines), encoding="utf-8")
@@ -278,14 +275,12 @@ def main():
   releases_csv = get_releases_csv_file()
   downloads_dir = get_downloads_dir()
   output_dir = get_output_dir()
-
   monitoring_df = create_monitoring_start_df(base_csv)
   versions_df = create_versions_df(downloads_dir)
   updates_df = create_updates_df(downloads_dir)
   updates_df = postprocess_updates_df(updates_df)
   merged_df = merge_node_data(monitoring_df, versions_df, updates_df)
   merged_df = add_days_to_releases(merged_df, releases_csv)
-  print(merged_df.to_string())
   summarize_j2ee_updates(merged_df, output_dir)
 
 
