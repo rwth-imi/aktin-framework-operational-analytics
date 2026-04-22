@@ -146,7 +146,7 @@ def main():
   output_dir = get_output_dir()
   derived_dir = get_derived_dir()
   df_plot = create_cumulative_counts_dataframe(csv_file)
-  df_plot.to_csv(derived_dir / "linechart_connected_eds.csv")
+  df_plot.to_csv(derived_dir / "linechart_connected_eds.csv", index=False)
   plot_cumulative_ed_trends(df_plot, output_dir)
 
 
