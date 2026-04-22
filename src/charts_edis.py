@@ -16,7 +16,7 @@
 """
 Created on 7/3/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.1
+@VERSION=1.2
 """
 
 from pathlib import Path
@@ -24,7 +24,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from helper.paths import get_base_csv_file, get_output_dir
+from helper.paths import get_base_csv_file, get_output_dir, get_derived_dir
 
 # nodes with monitored_since after the cutoff are ignored
 CUTOFF_DATE = "01-04-2026"
@@ -141,7 +141,9 @@ def plot_barchart(edis_counts: pd.Series, output_dir: Path):
 def main():
   csv_file = get_base_csv_file()
   output_dir = get_output_dir()
+  derived_dir = get_derived_dir()
   edis_counts = get_edis_counts(csv_file, CUTOFF_DATE)
+  edis_counts.to_csv(derived_dir / "chart_edis.csv")
   plot_piechart(edis_counts, output_dir)
   plot_barchart(edis_counts, output_dir)
 
