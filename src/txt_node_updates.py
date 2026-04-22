@@ -16,32 +16,22 @@
 """
 Created on 7/10/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.2.1
+@VERSION=2.0
 """
-
 import json
 from pathlib import Path
 from typing import List
 
 import pandas as pd
 
-from helper.paths import get_base_csv_file, get_downloads_dir, get_output_dir, get_releases_csv_file, get_derived_dir
+from helper.paths import get_base_csv_file, get_downloads_dir, get_output_dir, get_releases_csv_file
 
 # log entries after the cutoff are ignored
-CUTOFF_DATE = "2026-04-01"
+CUTOFF_DATE = "2025-05-01"
 
 
 def extract_node_id_from_path(file_path: Path) -> str:
   return file_path.parent.name
-
-
-def create_monitoring_start_df(base_csv: Path) -> pd.DataFrame:
-  """
-  Loads the base CSV and returns a DataFrame with node ID as string and the monitored_since date.
-  """
-  df = pd.read_csv(base_csv)
-  df["node_id"] = df["node"].astype(str)
-  return df[["node_id", "monitored_since"]].copy()
 
 
 def find_files(downloads_dir: Path, keyword: str, suffix: str) -> List[Path]:
@@ -65,209 +55,209 @@ def find_all_version_files(downloads_dir: Path) -> List[Path]:
   return find_files(downloads_dir, "versions", ".txt")
 
 
+def parse_node_updates(file_path: Path) -> List[dict]:
+  node_id = extract_node_id_from_path(file_path)
+  parsed_lines = []
+
+  with file_path.open(encoding="utf-8") as f:
+    for line in f:
+      if " : " not in line:
+        continue
+      time_str, action_str = line.strip().split(" : ", 1)
+      date = pd.to_datetime(time_str, utc=True, errors="coerce").date()
+      if pd.isna(date):
+        continue
+      parsed_lines.append((date, action_str))
+
+  parsed_lines.sort(key=lambda x: x[0])
+
+  actions_by_date = {}
+  for date, action_str in parsed_lines:
+    if date not in actions_by_date:
+      actions_by_date[date] = []
+    actions_by_date[date].append(action_str)
+
+  apache2_installed = True
+  postgres_installed = True
+  updates = []
+
+  for date, actions in actions_by_date.items():
+    from_state = "Docker" if not apache2_installed and not postgres_installed else "Debian"
+
+    app_updates_today = []
+
+    for action_str in actions:
+      if "[apache2]" in action_str:
+        apache2_installed = "[not installed]" not in action_str.split("-->")[1]
+      if "[postgres]" in action_str:
+        postgres_installed = "[not installed]" not in action_str.split("-->")[1]
+
+      if "[dwh-j2ee]" in action_str or "[ear]" in action_str:
+        transition = action_str.split("] ")[1]
+        from_ver, to_ver = transition.split(" --> ")
+        app_updates_today.append((from_ver.strip(), to_ver.strip()))
+
+    to_state = "Docker" if not apache2_installed and not postgres_installed else "Debian"
+
+    new_install = None
+    deleted_install = None
+    valid_updates = []
+
+    for from_ver, to_ver in app_updates_today:
+      if from_ver == "NEW":
+        new_install = to_ver
+      elif to_ver == "DELETED":
+        deleted_install = from_ver
+      else:
+        valid_updates.append((from_ver, to_ver))
+
+    if new_install and deleted_install:
+      valid_updates.append((deleted_install, new_install))
+
+    for from_ver, to_ver in valid_updates:
+      updates.append({
+        "node_id": node_id,
+        "date": date.isoformat(),
+        "from_state": from_state,
+        "to_state": to_state,
+        "from_version": from_ver,
+        "to_version": to_ver
+      })
+
+  return updates
+
+
 def create_updates_df(downloads_dir: Path) -> pd.DataFrame:
-  """
-  Reads all version log files, extracts version transitions for dwh-j2ee or ear, and returns a DataFrame with node ID
-  and timestamps.
-  """
-  rows = []
-  cutoff = pd.to_datetime(CUTOFF_DATE, format="%Y-%m-%d").date()
+  all_updates = []
   for file_path in find_all_version_logs(downloads_dir):
-    node_id = extract_node_id_from_path(file_path)
-    entry = {"node_id": node_id}
-    with file_path.open(encoding="utf-8") as f:
-      for line in f:
-        if "dwh-j2ee" in line or "ear" in line:
-          parts = line.strip().split(" : ")
-          if len(parts) >= 2:
-            timestamp_str = parts[0]
-            timestamp = pd.to_datetime(timestamp_str, utc=True, errors="coerce")
-            if pd.isna(timestamp):
-              continue
-            if timestamp.date() > cutoff:
-              continue
-            transition = parts[1].split("]")[-1].strip()
-            entry[transition] = timestamp.date().isoformat()
-    rows.append(entry)
-  return pd.DataFrame(rows)
+    all_updates.extend(parse_node_updates(file_path))
+  return pd.DataFrame(all_updates)
 
 
-def first_non_null_from_columns(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
-  """
-  Returns the first non-null value from the candidate columns that actually exist in the DataFrame.
-  If none of the columns exist, a Series with None values is returned.
-  """
-  existing = [col for col in candidates if col in df.columns]
-  if not existing:
-    return pd.Series([None] * len(df), index=df.index)
-  return df[existing].bfill(axis=1).iloc[:, 0]
+def pivot_updates(df: pd.DataFrame) -> pd.DataFrame:
+  # Zielversionen definieren
+  versions = ["1.5.1", "1.6", "1.7"]
+
+  # Eindeutige Node IDs als Basis
+  node_ids = df["node_id"].unique()
+  result = pd.DataFrame({"node_id": node_ids})
+
+  for v in versions:
+    # Zeilen finden, die diese Version als Ziel haben
+    mask = df["to_version"].str.contains(v, na=False)
+    subset = df[mask][["node_id", "date", "to_state"]]
+
+    # Bei Mehrfachtreffern pro Node den letzten behalten
+    subset = subset.drop_duplicates(subset=["node_id"], keep="last")
+
+    # Spalten für dieses Pivot-Segment benennen
+    subset = subset.rename(columns={
+      "date": f"to{v}",
+      "to_state": f"state{v}"
+    })
+
+    # An das Ergebnis-Dataframe mergen
+    result = result.merge(subset, on="node_id", how="left")
+
+  # Datumsspalten in datetime umwandeln für NaT Darstellung
+  for v in versions:
+    result[f"to{v}"] = pd.to_datetime(result[f"to{v}"], errors="coerce")
+
+  return result.sort_values("node_id").reset_index(drop=True)
 
 
-def postprocess_updates_df(updates_df: pd.DataFrame) -> pd.DataFrame:
-  """
-  Combines raw transition columns into to1.5.1, to1.6 and to1.7. Keeps only final columns.
-  """
-  df = updates_df.copy()
-  df["to1.5.1"] = first_non_null_from_columns(
-      df,
-      [
-        "dwh-j2ee-1.5rc1 --> dwh-j2ee-1.5.1rc1",
-        "ear-1.5rc1 --> ear-1.5.1rc1",
-        "NEW --> dwh-j2ee-1.5.1rc1",
-        "NEW --> ear-1.5.1rc1",
-      ],
-  )
-  df["to1.6"] = first_non_null_from_columns(
-      df,
-      [
-        "dwh-j2ee-1.5.1rc1 --> dwh-j2ee-1.6rc1",
-        "ear-1.5.1rc1 --> ear-1.6rc1",
-        "NEW --> dwh-j2ee-1.6rc1",
-        "NEW --> ear-1.6rc1",
-      ],
-  )
-  df["to1.7"] = first_non_null_from_columns(
-      df,
-      [
-        "dwh-j2ee-1.6rc1 --> dwh-j2ee-1.7rc1",
-        "ear-1.6rc1 --> ear-1.7rc1",
-        "dwh-j2ee-1.5.1rc1 --> dwh-j2ee-1.7rc1",
-        "ear-1.5.1rc1 --> ear-1.7rc1",
-        "NEW --> dwh-j2ee-1.7rc1",
-        "NEW --> ear-1.7rc1",
-      ],
-  )
+def parse_current_state_and_version(file_path: Path) -> dict:
+  node_id = extract_node_id_from_path(file_path)
 
-  # Special case for clinic 47: use "1.4 --> DELETED" as to1.6
-  cond = df["node_id"].astype(str) == "47"
-  if "dwh-j2ee-1.4 --> DELETED" in df.columns:
-    df.loc[cond, "to1.6"] = df.loc[cond, "dwh-j2ee-1.4 --> DELETED"]
-  return df[["node_id", "to1.5.1", "to1.6", "to1.7"]].copy()
+  try:
+    with file_path.open(encoding="utf-8") as vf:
+      data = json.load(vf)
+
+      # Version auslesen (Priorität dwh-j2ee, Fallback ear)
+      current_version = data.get("dwh-j2ee") or data.get("ear")
+
+      # State auswerten
+      apache_installed = data.get("apache2") != "[not installed]"
+      postgres_installed = data.get("postgres") != "[not installed]"
+
+      current_state = "Docker" if not apache_installed and not postgres_installed else "Debian"
+
+      return {
+        "node_id": node_id,
+        "current_version": current_version,
+        "current_state": current_state
+      }
+  except Exception:
+    return {
+      "node_id": node_id,
+      "current_version": None,
+      "current_state": None
+    }
 
 
-def parse_versions_json(file_path: Path) -> str | None:
-  """
-  Loads a JSON versions file and returns the installed version, prioritizing dwh-j2ee and falling back to ear.
-  """
-  with file_path.open(encoding="utf-8") as vf:
-    try:
-      versions_json = json.load(vf)
-      return versions_json.get("dwh-j2ee") or versions_json.get("ear")
-    except Exception:
-      return None
-
-
-def create_versions_df(downloads_dir: Path) -> pd.DataFrame:
-  """
-  Loads all current versions files and returns a DataFrame with node ID and installed version.
-  """
+def create_current_versions_df(downloads_dir: Path) -> pd.DataFrame:
   rows = []
   for file_path in find_all_version_files(downloads_dir):
-    node_id = extract_node_id_from_path(file_path)
-    rows.append({"node_id": node_id, "current": parse_versions_json(file_path)})
+    rows.append(parse_current_state_and_version(file_path))
   return pd.DataFrame(rows)
 
 
-def merge_node_data(monitoring_df: pd.DataFrame, versions_df: pd.DataFrame, updates_df: pd.DataFrame) -> pd.DataFrame:
+def create_monitoring_start_df(base_csv: Path) -> pd.DataFrame:
   """
-  Merges monitoring, versions and updates DataFrames on node ID and returns the merged, sorted result.
+  Loads the base CSV and returns a DataFrame with node ID as string and the monitored_since date.
   """
-  df = monitoring_df.merge(versions_df, on="node_id", how="outer")
-  df = df.merge(updates_df, on="node_id", how="outer")
-  df["node_id"] = df["node_id"].astype(int)
+  df = pd.read_csv(base_csv)
+  df["node_id"] = df["node"].astype(str)
+  return df[["node_id", "monitored_since"]].copy()
+
+
+def merge_node_data(current_versions_df: pd.DataFrame,
+    pivoted_updates_df: pd.DataFrame,
+    monitoring_df: pd.DataFrame) -> pd.DataFrame:
+  # Erster Merge: Versionen und Updates
+  df = pd.merge(current_versions_df, pivoted_updates_df, on="node_id", how="outer")
+
+  # Zweiter Merge: Monitoring Start Datum hinzufügen
+  df = pd.merge(df, monitoring_df, on="node_id", how="outer")
+
+  # Node ID für Sortierung numerisch machen
+  df["node_id"] = pd.to_numeric(df["node_id"], errors="coerce")
   return df.sort_values("node_id").reset_index(drop=True)
 
 
-def get_release_date(releases_df: pd.DataFrame, version: str) -> pd.Timestamp:
-  """
-  Returns the release date for a given j2ee version from the releases CSV.
-  """
-  j2ee = releases_df[releases_df["type"] == "j2ee"]
-  matches = j2ee.loc[j2ee["version"] == version, "release_date"]
+def get_major_releases_map(csv_path: Path) -> dict:
+  df = pd.read_csv(csv_path, names=["version", "date", "type", "state"])
 
-  if matches.empty:
-    raise ValueError(f"Release date for version '{version}' not found in releases CSV.")
+  # Explizit nur nach deb und docker filtern
+  df = df[df["state"].isin(["deb", "docker"])]
 
-  return pd.to_datetime(matches.iloc[0])
+  # Nur die MAJOR Releases behalten
+  major_df = df[df["type"] == "MAJOR"]
 
+  releases_map = {}
 
-def add_days_to_releases(merged_df: pd.DataFrame, releases_csv: Path) -> pd.DataFrame:
-  """
-  Adds daysTo1.5.1, daysTo1.6 and daysTo1.7 by calculating the absolute difference in days between each update
-  timestamp and the official release date.
-  """
-  releases_df = pd.read_csv(releases_csv)
-  rel_1_5_1_date = get_release_date(releases_df, "v1.5.1rc1")
-  rel_1_6_date = get_release_date(releases_df, "v1.6rc1")
-  rel_1_7_date = get_release_date(releases_df, "v1.7rc1")
-  df = merged_df.copy()
+  for _, row in major_df.iterrows():
+    raw_version = str(row["version"])
 
-  df["to1.5.1"] = pd.to_datetime(df["to1.5.1"], errors="coerce")
-  df["to1.6"] = pd.to_datetime(df["to1.6"], errors="coerce")
-  df["to1.7"] = pd.to_datetime(df["to1.7"], errors="coerce")
+    base_version = None
+    if "1.5" in raw_version:
+      base_version = "1.5.1"
+    elif "1.6" in raw_version:
+      base_version = "1.6"
+    elif "1.7" in raw_version:
+      base_version = "1.7"
 
-  df["daysTo1.5.1"] = (rel_1_5_1_date - df["to1.5.1"]).abs().dt.days
-  df["daysTo1.6"] = (rel_1_6_date - df["to1.6"]).abs().dt.days
-  df["daysTo1.7"] = (rel_1_7_date - df["to1.7"]).abs().dt.days
-  return df
+    if not base_version:
+      continue
 
+    state = "Docker" if row["state"] == "docker" else "Debian"
 
-def append_timing_summary(lines: list[str], series: pd.Series, label: str) -> None:
-  """
-  Appends mean, median and IQR summary for a given update timing series.
-  """
-  values = series.dropna()
-  actual_updated = len(values)
-  lines.append("")
-  if values.empty:
-    lines.append(f"No valid data for {label}.")
-    return
-  mean = values.mean()
-  median = values.median()
-  q1 = values.quantile(0.25)
-  q3 = values.quantile(0.75)
-  lines.append(f"Update timing for {label} of {actual_updated} nodes:")
-  lines.append(f"Mean days: {mean:.2f}")
-  lines.append(f"Median days: {median:.2f}")
-  lines.append(f"Q1: {q1:.2f}")
-  lines.append(f"Q3: {q3:.2f}")
+    if base_version not in releases_map:
+      releases_map[base_version] = {}
 
+    releases_map[base_version][state] = row["date"]
 
-def summarize_j2ee_updates(df: pd.DataFrame, output_dir: Path) -> None:
-  """
-  Calculates absolute and percentage distribution per version, keeping missing current
-  versions as 'unknown', computes summary statistics for update timing, and saves the
-  results to a text file.
-  """
-
-  def normalize_version(val):
-    if pd.isna(val):
-      return "unknown"
-    if "1.5.1" in val:
-      return "1.5.1"
-    if "1.6" in val:
-      return "1.6"
-    if "1.7" in val:
-      return "1.7"
-    raise ValueError(f"Unexpected current version value: {val}")
-
-  df_clean = df.copy()
-  df_clean["version_group"] = df_clean["current"].apply(normalize_version)
-  version_order = ["1.5.1", "1.6", "1.7", "unknown"]
-  counts = df_clean["version_group"].value_counts().reindex(version_order, fill_value=0)
-  total = counts.sum()
-  percentages = (counts / total * 100).round(2)
-  lines = ["Nodes per version:"]
-  for version in version_order:
-    lines.append(f"{version}: {counts[version]} nodes ({percentages[version]}%)")
-  append_timing_summary(lines, df_clean["daysTo1.6"], "1.6")
-  append_timing_summary(lines, df_clean["daysTo1.7"], "1.7")
-
-  summary_name = Path(__file__).stem + ".txt"
-  output_file = output_dir / summary_name
-  output_file.write_text("\n".join(lines), encoding="utf-8")
-  derived_file = get_derived_dir() / summary_name
-  derived_file.write_text("\n".join(lines), encoding="utf-8")
+  return releases_map
 
 
 def main():
@@ -275,13 +265,22 @@ def main():
   releases_csv = get_releases_csv_file()
   downloads_dir = get_downloads_dir()
   output_dir = get_output_dir()
+
+  df = create_updates_df(downloads_dir)
+
+  print(df.to_string())
+
+  pivoted_df = pivot_updates(df)
+
+  current_versions_df = create_current_versions_df(downloads_dir)
+
   monitoring_df = create_monitoring_start_df(base_csv)
-  versions_df = create_versions_df(downloads_dir)
-  updates_df = create_updates_df(downloads_dir)
-  updates_df = postprocess_updates_df(updates_df)
-  merged_df = merge_node_data(monitoring_df, versions_df, updates_df)
-  merged_df = add_days_to_releases(merged_df, releases_csv)
-  summarize_j2ee_updates(merged_df, output_dir)
+
+  merged_df = merge_node_data(current_versions_df, pivoted_df, monitoring_df)
+  merged_df = apply_cutoff_filter(merged_df)
+  print(merged_df.to_string())
+
+  releases = get_major_releases_map(releases_csv)
 
 
 if __name__ == "__main__":
