@@ -1,4 +1,5 @@
 version,release_date,release_type,type
+v1.7rc1,2026-03-19,MAJOR,j2ee
 v1.6rc1,2024-11-22,MAJOR,j2ee
 v1.5.1rc1,2021-12-02,PATCH,j2ee
 v1.5rc1,2021-08-26,MINOR,j2ee
@@ -57,14 +58,21 @@ v1.1,2019-08-01,MINOR,dwh-setup
 v1.0.2,2019-02-18,PATCH,dwh-setup
 v1.0.1,2018-12-18,PATCH,dwh-setup
 v1.0,2018-12-12,MAJOR,dwh-setup
+v1.7rc1-1,2026-03-19,MAJOR,deb
 v1.6rc1-3,2025-08-28,PATCH,deb
 v1.6rc1-2,2025-01-14,PATCH,deb
 v1.6rc1-1,2024-11-22,MAJOR,deb
 v1.5,2021-12-02,MAJOR,deb
+v1.7rc1-1-111,2026-04-20,MAJOR,docker
 v1.6rc1-3-111,2025-08-28,PATCH,docker
 v1.6rc1-2-332,2025-06-11,PATCH,docker
 v1.6rc1-2-222,2025-01-10,PATCH,docker
 v1.6rc1-2-111,2025-01-08,MAJOR,docker
+v2026.1.1,2026-04-19,basismodul
+v2026.1.0,2026-04-13,basismodul
+v2025.3tr,2025-12-29,basismodul
+v2025.2,2024-12-02,basismodul
+v2025.1,2024-11-18,basismodul
 v1.28,2018-03-23,-,basismodul
 v1.27,2018-03-22,-,basismodul
 v1.26,2017-03-02,-,basismodul
