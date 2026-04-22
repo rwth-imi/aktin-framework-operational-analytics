@@ -1,10 +1,17 @@
 Nodes per version:
-1.5.1: 27 nodes (27.55%)
-1.6: 71 nodes (70.41%)
-other: 2 nodes (2.04%)
+1.5.1: 27 nodes (26.73%) - 26 Debian, 1 Docker
+1.6: 66 nodes (65.35%) - 36 Debian, 30 Docker
+1.7: 5 nodes (4.95%) - 5 Debian
+unknown: 3 nodes (2.97%)
 
-Update timing to 1.6 of 61 nodes:
-Mean days: 227.28
-Median days: 200.00
-Q1: 166.00
-Q3: 320.00
+Update timing for 1.6 of 60 nodes:
+Mean days: 216.70
+Median days: 193.00
+Q1: 164.75
+Q3: 274.00
+
+Update timing for 1.7 of 5 nodes:
+Mean days: 16.20
+Median days: 11.00
+Q1: 6.00
+Q3: 29.00
