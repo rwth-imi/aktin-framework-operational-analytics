@@ -16,7 +16,7 @@
 """
 Created on 7/10/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.0
+@VERSION=1.1
 """
 
 import json
@@ -25,7 +25,7 @@ from typing import List
 
 import pandas as pd
 
-from helper.paths import get_base_csv_file, get_downloads_dir, get_output_dir, get_releases_csv_file
+from helper.paths import get_base_csv_file, get_downloads_dir, get_output_dir, get_releases_csv_file, get_derived_dir
 
 # log entries after the cutoff are ignored
 CUTOFF_DATE = "2026-04-01"
@@ -209,6 +209,8 @@ def summarize_j2ee_updates(df: pd.DataFrame, output_dir: Path) -> None:
   summary_name = Path(__file__).stem + ".txt"
   output_file = output_dir / summary_name
   output_file.write_text("\n".join(lines), encoding="utf-8")
+  derived_file = get_derived_dir() / summary_name
+  derived_file.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main():
