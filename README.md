@@ -80,7 +80,7 @@ will depend on the sensitivity of the requested data, the intended use, and the 
 | `edis_counts.csv`             | Aggregated counts of connected AKTIN emergency departments by reported Emergency Department Information System (EDIS) vendor after name normalization and grouping of rare systems |
 | `csv_yearly_encounter.csv`    | Year-level summary table of reporting nodes, observed days, total emergency department encounters, per-node encounter statistics, and linked inpatient outcome coverage            |
 | `linechart_connected_eds.csv` | Time series of cumulative numbers of connected AKTIN Data Warehouse nodes across the observation period                                                                            |
-| `txt_node_updates.txt`        | Text summary of deployed software versions across connected nodes and descriptive statistics for update timing to version 1.6                                                      |
+| `txt_node_updates.txt`        | Text summary of deployed software versions across connected nodes and descriptive statistics for update timings                                                    |
 
 ## License
 
