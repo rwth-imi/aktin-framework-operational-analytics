@@ -16,7 +16,7 @@
 """
 Created on 7/4/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.3
+@VERSION=1.4
 """
 
 import zipfile
@@ -25,9 +25,9 @@ from pathlib import Path
 import pandas as pd
 
 from helper.download_and_aggregate_broker_results import get_or_export_request_result
-from helper.paths import get_output_dir, get_downloads_dir
+from helper.paths import get_output_dir, get_downloads_dir, get_derived_dir
 
-REQUEST_IDS = ["3047", "3077", "3086", "3100", "3105", "3114", "3191", "3233", "3299"]
+REQUEST_IDS = ["3047", "3077", "3086", "3100", "3105", "3114", "3191", "3233", "3299", "3425", "3545"]
 
 # rows with date after the cutoff are ignored
 CUTOFF_DATE = "2026-04-01"
@@ -223,6 +223,7 @@ def summarize_yearly_overall(df: pd.DataFrame, output_dir: Path) -> pd.DataFrame
 
   table_name = Path(__file__).stem + "2.csv"
   summary_df.to_csv(output_dir / table_name, index=False)
+  summary_df.to_csv(get_derived_dir() / "csv_yearly_encounter.csv", index=False)
   return summary_df
 
 
