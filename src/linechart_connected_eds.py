@@ -16,7 +16,7 @@
 """
 Created on 7/3/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.2
+@VERSION=1.3
 """
 
 from pathlib import Path
@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from helper.paths import get_base_csv_file, get_output_dir
+from helper.paths import get_base_csv_file, get_output_dir, get_derived_dir
 
 # nodes with monitored_since after the cutoff are ignored
 CUTOFF_DATE = "01-04-2026"
@@ -144,7 +144,9 @@ def plot_cumulative_ed_trends(df_plot: pd.DataFrame, output_dir: Path):
 def main():
   csv_file = get_base_csv_file()
   output_dir = get_output_dir()
+  derived_dir = get_derived_dir()
   df_plot = create_cumulative_counts_dataframe(csv_file)
+  df_plot.to_csv(derived_dir / "linechart_connected_eds.csv")
   plot_cumulative_ed_trends(df_plot, output_dir)
 
 
