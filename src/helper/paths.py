@@ -44,6 +44,12 @@ def get_downloads_dir() -> Path:
   return downloads_dir
 
 
+def get_derived_dir() -> Path:
+  derived_dir = get_project_root() / "derived"
+  derived_dir.mkdir(parents=True, exist_ok=True)
+  return derived_dir
+
+
 def get_output_dir() -> Path:
   output_dir = get_project_root() / "out"
   output_dir.mkdir(parents=True, exist_ok=True)

@@ -210,3 +210,4 @@ __marimo__/
 .idea
 out/
 .png
+resources/base.csv
