@@ -16,7 +16,7 @@
 """
 Created on 7/10/25
 @AUTHOR: Alexander Kombeiz (akombeiz@ukaachen.de)
-@VERSION=1.1
+@VERSION=1.2
 """
 
 import json
@@ -92,21 +92,60 @@ def create_updates_df(downloads_dir: Path) -> pd.DataFrame:
   return pd.DataFrame(rows)
 
 
+def first_non_null_from_columns(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
+  """
+  Returns the first non-null value from the candidate columns that actually exist in the DataFrame.
+  If none of the columns exist, a Series with None values is returned.
+  """
+  existing = [col for col in candidates if col in df.columns]
+  if not existing:
+    return pd.Series([None] * len(df), index=df.index)
+  return df[existing].bfill(axis=1).iloc[:, 0]
+
+
 def postprocess_updates_df(updates_df: pd.DataFrame) -> pd.DataFrame:
   """
-  Combines raw transition columns into to1.5.1 and to1.6. Keeps only final columns.
+  Combines raw transition columns into to1.5.1, to1.6 and to1.7. Keeps only final columns.
   """
   df = updates_df.copy()
-  # Create target columns with fallback: first non-null value wins
-  df["to1.5.1"] = df[["dwh-j2ee-1.5rc1 --> dwh-j2ee-1.5.1rc1", "NEW --> dwh-j2ee-1.5.1rc1"]].bfill(axis=1).iloc[:, 0]
-  df["to1.6"] = df[["dwh-j2ee-1.5.1rc1 --> dwh-j2ee-1.6rc1", "NEW --> dwh-j2ee-1.6rc1"]].bfill(axis=1).iloc[:, 0]
+  df["to1.5.1"] = first_non_null_from_columns(
+      df,
+      [
+        "dwh-j2ee-1.5rc1 --> dwh-j2ee-1.5.1rc1",
+        "ear-1.5rc1 --> ear-1.5.1rc1",
+        "NEW --> dwh-j2ee-1.5.1rc1",
+        "NEW --> ear-1.5.1rc1",
+      ],
+  )
+  df["to1.6"] = first_non_null_from_columns(
+      df,
+      [
+        "dwh-j2ee-1.5.1rc1 --> dwh-j2ee-1.6rc1",
+        "ear-1.5.1rc1 --> ear-1.6rc1",
+        "NEW --> dwh-j2ee-1.6rc1",
+        "NEW --> ear-1.6rc1",
+      ],
+  )
+  df["to1.7"] = first_non_null_from_columns(
+      df,
+      [
+        "dwh-j2ee-1.6rc1 --> dwh-j2ee-1.7rc1",
+        "ear-1.6rc1 --> ear-1.7rc1",
+        "dwh-j2ee-1.5.1rc1 --> dwh-j2ee-1.7rc1",
+        "ear-1.5.1rc1 --> ear-1.7rc1",
+        "NEW --> dwh-j2ee-1.7rc1",
+        "NEW --> ear-1.7rc1",
+      ],
+  )
+
   # Special case for clinic 47: use "1.4 --> DELETED" as to1.6
   cond = df["node_id"].astype(str) == "47"
-  df.loc[cond, "to1.6"] = df.loc[cond, "dwh-j2ee-1.4 --> DELETED"]
-  return df[["node_id", "to1.5.1", "to1.6"]].copy()
+  if "dwh-j2ee-1.4 --> DELETED" in df.columns:
+    df.loc[cond, "to1.6"] = df.loc[cond, "dwh-j2ee-1.4 --> DELETED"]
+  return df[["node_id", "to1.5.1", "to1.6", "to1.7"]].copy()
 
 
-def parse_versions_json(file_path: Path) -> str:
+def parse_versions_json(file_path: Path) -> str | None:
   """
   Loads a JSON versions file and returns the installed version, prioritizing dwh-j2ee and falling back to ear.
   """
@@ -139,30 +178,65 @@ def merge_node_data(monitoring_df: pd.DataFrame, versions_df: pd.DataFrame, upda
   return df.sort_values("node_id").reset_index(drop=True)
 
 
+def get_release_date(releases_df: pd.DataFrame, version: str) -> pd.Timestamp:
+  """
+  Returns the release date for a given j2ee version from the releases CSV.
+  """
+  j2ee = releases_df[releases_df["type"] == "j2ee"]
+  matches = j2ee.loc[j2ee["version"] == version, "release_date"]
+
+  if matches.empty:
+    raise ValueError(f"Release date for version '{version}' not found in releases CSV.")
+
+  return pd.to_datetime(matches.iloc[0])
+
+
 def add_days_to_releases(merged_df: pd.DataFrame, releases_csv: Path) -> pd.DataFrame:
   """
-  Adds daysTo1.5.1 and daysTo1.6 by calculating the absolute difference in days between each update timestamp and the
-  official release date.
+  Adds daysTo1.5.1, daysTo1.6 and daysTo1.7 by calculating the absolute difference in days between each update
+  timestamp and the official release date.
   """
   releases_df = pd.read_csv(releases_csv)
-  j2ee = releases_df[releases_df["type"] == "j2ee"]
-  rel_1_5_1_date = pd.to_datetime(j2ee[j2ee["version"] == "v1.5.1rc1"]["release_date"].iloc[0])
-  rel_1_6_date = pd.to_datetime(j2ee[j2ee["version"] == "v1.6rc1"]["release_date"].iloc[0])
+  rel_1_5_1_date = get_release_date(releases_df, "v1.5.1rc1")
+  rel_1_6_date = get_release_date(releases_df, "v1.6rc1")
+  rel_1_7_date = get_release_date(releases_df, "v1.7rc1")
   df = merged_df.copy()
-  # Ensure update timestamps are datetime
+
   df["to1.5.1"] = pd.to_datetime(df["to1.5.1"], errors="coerce")
   df["to1.6"] = pd.to_datetime(df["to1.6"], errors="coerce")
-  # Compute absolute differences
+  df["to1.7"] = pd.to_datetime(df["to1.7"], errors="coerce")
+
   df["daysTo1.5.1"] = (rel_1_5_1_date - df["to1.5.1"]).abs().dt.days
   df["daysTo1.6"] = (rel_1_6_date - df["to1.6"]).abs().dt.days
+  df["daysTo1.7"] = (rel_1_7_date - df["to1.7"]).abs().dt.days
   return df
+
+
+def append_timing_summary(lines: list[str], series: pd.Series, label: str) -> None:
+  """
+  Appends mean, median and IQR summary for a given update timing series.
+  """
+  values = series.dropna()
+  actual_updated = len(values)
+  lines.append("")
+  if values.empty:
+    lines.append(f"No valid data for {label}.")
+    return
+  mean = values.mean()
+  median = values.median()
+  q1 = values.quantile(0.25)
+  q3 = values.quantile(0.75)
+  lines.append(f"Update timing for {label} of {actual_updated} nodes:")
+  lines.append(f"Mean days: {mean:.2f}")
+  lines.append(f"Median days: {median:.2f}")
+  lines.append(f"Q1: {q1:.2f}")
+  lines.append(f"Q3: {q3:.2f}")
 
 
 def summarize_j2ee_updates(df: pd.DataFrame, output_dir: Path) -> None:
   """
-  Adds nodes with empty 'current' to the version 1.6 count. Calculates absolute and percentage distribution
-  per version, counts how many nodes actually updated to 1.6 based on 'daysTo1.6', computes mean, median, and IQR
-  for update timing, and saves the results to 'update_summary.txt' in the output directory.
+  Adds nodes with empty 'current' to the version 1.7 count. Calculates absolute and percentage distribution
+  per version, computes summary statistics for update timing, and saves the results to a text file.
   """
 
   def normalize_version(val):
@@ -172,40 +246,26 @@ def summarize_j2ee_updates(df: pd.DataFrame, output_dir: Path) -> None:
       return "1.5.1"
     if "1.6" in val:
       return "1.6"
+    if "1.7" in val:
+      return "1.7"
     return "other"
 
-  no_current = sum(df["current"].notna() == False)
+  no_current = df["current"].isna().sum()
   df_clean = df[df["current"].notna()].copy()
   df_clean["version_group"] = df_clean["current"].apply(normalize_version)
+  version_order = ["1.5.1", "1.6", "1.7", "other"]
+  counts = df_clean["version_group"].value_counts().reindex(version_order, fill_value=0)
 
-  # Count & percentage
-  counts = df_clean["version_group"].value_counts().sort_index()
+  # Keep previous behavior of assigning nodes without current version to the newest release bucket
+  counts["1.7"] += no_current
+
   total = counts.sum()
   percentages = (counts / total * 100).round(2)
   lines = ["Nodes per version:"]
-  for version in counts.index:
-    if version == "1.6":
-      counts[version] += no_current
+  for version in version_order:
     lines.append(f"{version}: {counts[version]} nodes ({percentages[version]}%)")
-
-  # Updates to 1.6
-  days_to_1_6 = df_clean["daysTo1.6"].dropna()
-  actual_updated = len(days_to_1_6)
-  # Mean, median, IQR for daysTo1.6
-  if not days_to_1_6.empty:
-    mean = days_to_1_6.mean()
-    median = days_to_1_6.median()
-    q1 = days_to_1_6.quantile(0.25)
-    q3 = days_to_1_6.quantile(0.75)
-    lines.append("")
-    lines.append(f"Update timing to 1.6 of {actual_updated} nodes:")
-    lines.append(f"Mean days: {mean:.2f}")
-    lines.append(f"Median days: {median:.2f}")
-    lines.append(f"Q1: {q1:.2f}")
-    lines.append(f"Q3: {q3:.2f}")
-  else:
-    lines.append("")
-    lines.append("No valid data for daysTo1.6.")
+  append_timing_summary(lines, df_clean["daysTo1.6"], "1.6")
+  append_timing_summary(lines, df_clean["daysTo1.7"], "1.7")
   summary_name = Path(__file__).stem + ".txt"
   output_file = output_dir / summary_name
   output_file.write_text("\n".join(lines), encoding="utf-8")
@@ -225,6 +285,7 @@ def main():
   updates_df = postprocess_updates_df(updates_df)
   merged_df = merge_node_data(monitoring_df, versions_df, updates_df)
   merged_df = add_days_to_releases(merged_df, releases_csv)
+  print(merged_df.to_string())
   summarize_j2ee_updates(merged_df, output_dir)
 
 
