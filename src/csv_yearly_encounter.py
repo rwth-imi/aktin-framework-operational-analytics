@@ -80,17 +80,10 @@ def get_or_create_daily_encounter_df(downloads_dir: Path) -> pd.DataFrame:
       zip_file = get_or_export_request_result(downloads_dir, [req_id])
       df_part = create_daily_encounter_df(zip_file)
       all_dfs.append(df_part)
-
     df = pd.concat(all_dfs, ignore_index=True)
-
     df = df.sort_values(by=["node_id", "date", "encounter"], ascending=[True, True, False])
-
-    table_name = Path(__file__).stem + "555.csv"
-    df.to_csv(get_output_dir() / table_name, index=False)
-
     df = df.drop_duplicates(subset=["node_id", "date"], keep="first")
     df = df.sort_values(by=["node_id", "date"]).reset_index(drop=True)
-
     df.to_csv(cache_file, index=False)
     print(f"Saved daily encounter DataFrame to {cache_file}")
   return df
