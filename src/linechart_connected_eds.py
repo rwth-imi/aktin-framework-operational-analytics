@@ -114,12 +114,12 @@ def plot_cumulative_ed_trends(df_plot: pd.DataFrame, output_dir: Path):
   ax.set_ylabel("Connected DWH nodes", fontsize=14)
   ax.set_xlabel("Year", fontsize=14)
   ax.grid(True, axis="y")
-  ax.xaxis.grid(False)
-  ax.xaxis.set_major_locator(mdates.YearLocator())
+  ax.xaxis.grid(True, linestyle="--", alpha=0.5)
+  ax.xaxis.set_major_locator(mdates.YearLocator(2))
   ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
   ax.tick_params(axis="x", which="major", pad=10, rotation=0, labelsize=12)
   ax.tick_params(axis="y", labelsize=12)
-  ax.yaxis.set_major_locator(ticker.MultipleLocator(5))
+  ax.yaxis.set_major_locator(ticker.MultipleLocator(20))
   ax.set_ylim(0, df_plot["Cumulative_EDs"].max() + 5)
 
   # Vertical Line
