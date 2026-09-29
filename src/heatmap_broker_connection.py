@@ -144,7 +144,7 @@ def postprocess_df(df: pd.DataFrame) -> pd.DataFrame:
   df = df.copy()
 
   # Drop unwanted months
-  months_to_drop = ["2022-01", "2022-02", "2022-03", "2026-01"]
+  months_to_drop = ["2022-01", "2022-02", "2022-03"]
   df = df[~df["month"].astype(str).isin(months_to_drop)]
 
   # Drop low-observation rows
