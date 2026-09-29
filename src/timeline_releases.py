@@ -26,7 +26,7 @@ import pandas as pd
 
 from helper.paths import get_modified_releases_csv_file, get_output_dir
 
-TYPE_COLORS = {"docker": "purple", "deb": "red", "j2ee": "blue", "broker": "green"}
+TYPE_COLORS = {"docker": "#332288", "deb": "#D55E00", "j2ee": "#008B8B", "broker": "#4d4d4d"}
 
 DISPLAY_NAMES = {"docker": "DWH Docker", "deb": "DWH Debian Package", "j2ee": "DWH EAR", "broker": "Broker"}
 

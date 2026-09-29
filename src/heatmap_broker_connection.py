@@ -180,7 +180,7 @@ def plot_connection_heatmap(df: pd.DataFrame, output_dir: Path):
     heatmap_df,
     annot=annot_df,
     fmt="",
-    cmap="RdYlGn",
+    cmap="RdYlBu",
     vmin=0,
     vmax=100,
     linewidths=0.3,
